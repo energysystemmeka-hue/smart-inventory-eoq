@@ -1,0 +1,22 @@
+# Excel lock/temp files (created while a workbook is open)
+~$*.xlsx
+~$*.xlsm
+*.tmp
+
+# Local Claude Desktop config copies (contain personal paths) and secrets
+claude_desktop_config.json
+*.bak
+.env
+*.key
+
+# Python
+__pycache__/
+.venv/
+*.pyc
+
+# OS / editor
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+.idea/

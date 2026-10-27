@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "excel": {
+      "command": "uvx",
+      "args": [
+        "excel-mcp-server",
+        "stdio",
+        "--allow-dir",
+        "C:\\path\\to\\smart-inventory-eoq\\data"
+      ]
+    }
+  }
+}

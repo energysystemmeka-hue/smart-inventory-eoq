@@ -11,7 +11,7 @@ model where daily demand is a random variable (Normal distribution) instead of a
 | Stage | Content | Status |
 |---|---|---|
 | 1 | Claude Desktop + Excel MCP Server setup, connection test, repository | ✅ Done |
-| 2 | 30-day random demand (Normal distribution), EOQ, Safety Stock, Reorder Point, tables and charts | ⏳ Next |
+| 2 | 30-day random demand (Normal distribution), EOQ, Safety Stock, Reorder Point, tables and charts | ✅ Done |
 | 3 | Presentation, Zoom recording, live demo (e.g. changing demand σ from 10 to 20) | ⏳ Planned |
 
 ## Repository layout
@@ -19,7 +19,10 @@ model where daily demand is a random variable (Normal distribution) instead of a
 ```
 smart-inventory-eoq/
 ├── data/        Excel workbooks Claude works on (the only folder the MCP server may access)
+│                  Inventory_Test.xlsx   Stage 1 connection test
+│                  Inventory_Model.xlsx  Stage 2 inventory model
 ├── docs/        Project documentation and notes
+│                  stage1-mcp-test.md, stage2-inventory-model.md
 ├── outputs/     Charts, exports and results
 └── setup/       Setup helper script and an example Claude Desktop config
 ```
@@ -92,7 +95,8 @@ Save the file while Claude is closed, then start Claude.
 Are you connected to the Excel MCP server? List the Excel files in the allowed folder with list_workbooks.
 ```
 
-Claude should ask for permission to use the tool and then list `Inventory_Test.xlsx`.
+Claude should ask for permission to use the tool and then list the workbooks in `data`
+(`Inventory_Test.xlsx` and `Inventory_Model.xlsx`).
 
 ## Troubleshooting
 
@@ -101,12 +105,67 @@ Claude should ask for permission to use the tool and then list `Inventory_Test.x
 | `uv : The term 'uv' is not recognized` | Open a new PowerShell window after installing uv. Terminals that were open before the install do not see it. |
 | Claude says it has no Excel tools | Claude was not fully restarted, or it overwrote the config. Quit Claude from the system tray, run step 5 again, then start Claude. |
 | Claude cannot open a file | The server only allows files inside the `data` folder. Use paths relative to it, e.g. `Inventory_Test.xlsx`. |
-| Changes do not appear / file is locked | Close the workbook in Excel before asking Claude to change it. |
+| Changes do not appear / file is locked | Close the workbook in Excel before asking Claude to change it. While Excel has the file open, a write fails with "Access denied" (Turkish Windows: "Erişim engellendi"). |
+| Safety stock, reorder point or total cost come back empty | The MCP server's calculation engine supports `NORM.S.INV` but not the older `NORMSINV`. Use `NORM.S.INV`. |
 
 ## Stage 1 test file
 
 `data/Inventory_Test.xlsx` was created and then edited by Claude through MCP (see
 [`docs/stage1-mcp-test.md`](docs/stage1-mcp-test.md)).
+
+## Stage 2 inventory model
+
+`data/Inventory_Model.xlsx` is a single-product inventory model with stochastic daily demand.
+Full details, formulas and test results are in
+[`docs/stage2-inventory-model.md`](docs/stage2-inventory-model.md).
+
+### Worksheets
+
+| Sheet | Content |
+|---|---|
+| **Inputs** | All parameters in one place: mean daily demand μ = 50, standard deviation σ = 10, 365 days/year, ordering cost S = 100 TL/order, holding cost H = 2 TL/unit/year, lead time L = 5 days, service level 95 %, and the z value `=NORM.S.INV(B8)`. Each parameter has a defined name (`Mu`, `Sigma`, `LeadTime`, …) that the formulas use. |
+| **Demand** | 30 days of simulated daily demand, a reference line at μ, 30-day statistics (mean, standard deviation, min, max) and a line chart. |
+| **Results** | Annual demand, EOQ, orders per year, cycle length, lead-time demand, safety stock, reorder point, annual cost breakdown, a check of safety stock based on the 30-day sample, and a column chart of lead-time demand, safety stock and reorder point. |
+
+### Demand generation
+
+Column B of the **Demand** sheet holds 30 fixed standard normal draws Z ~ N(0, 1). Daily demand is
+
+```
+Demand = MAX(0, ROUND(μ + σ · Z, 0))
+```
+
+Because the draws are fixed (no `RAND()`), the sample is reproducible, and changing μ or σ on the
+**Inputs** sheet updates the whole model at once.
+
+### Formulas
+
+| Quantity | Formula |
+|---|---|
+| Annual demand | D = μ × 365 |
+| Economic order quantity | Q* = √(2DS / H) |
+| Safety stock | SS = z × σ × √L, with z = `NORM.S.INV(service level)` |
+| Reorder point | ROP = μ × L + SS |
+| Total annual cost | (D / Q*) × S + (Q* / 2) × H + SS × H |
+
+With the default inputs: EOQ ≈ 1,350.9 units, SS ≈ 36.8 units, ROP ≈ 286.8 units, total annual
+cost ≈ 2,775.41 TL.
+
+The z value uses `NORM.S.INV`, not the older `NORMSINV`. Both give the same result in Excel, but the
+Excel MCP Server's calculation engine only supports `NORM.S.INV`. With `NORMSINV`, MCP returned empty
+values for safety stock, reorder point and total cost.
+
+### MCP tests
+
+All of these were done through Excel MCP tools:
+
+- Read all three sheets, formulas and defined names.
+- Changed `Inputs!B9` from `=NORMSINV(B8)` to `=NORM.S.INV(B8)`. After that, all results were
+  calculated. The original file was backed up first.
+- Sensitivity test: changed σ from 10 to 20, read the new results, then set σ back to 10 and
+  confirmed that all results returned to their original values. EOQ stayed at 1,350.9 units, safety
+  stock doubled from 36.8 to 73.6 units, the reorder point rose from 286.8 to 323.6 units, and total
+  annual cost rose from 2,775.41 to 2,848.97 TL.
 
 ## Team
 
